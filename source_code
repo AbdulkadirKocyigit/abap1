@@ -1,0 +1,496 @@
+REPORT z_reuse_alv_main.
+
+START-OF-SELECTION.
+
+  PERFORM get_data.
+  PERFORM build_field_catalog.
+  PERFORM build_layout.
+  PERFORM display_alv.
+
+
+
+  INCLUDE z_reuse_alv_top.
+  INCLUDE z_reuse_alv_frm.
+
+-------------------------------------------------------------------------------------------------------------------------------------------
+
+*&---------------------------------------------------------------------*
+*&  Include           Z_REUSE_ALV_TOP
+*&---------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+*&  Seçim Ekranı
+*&---------------------------------------------------------------------*
+TABLES: ekko.
+SELECT-OPTIONS: s_ebeln FOR ekko-ebeln.  " Satın alma belgesi numarası için seçim ekranı
+
+*&---------------------------------------------------------------------*
+*&  Veri Tanımlamaları
+*&---------------------------------------------------------------------*
+TYPES: BEGIN OF ty_ekko,
+         ebeln      TYPE ebeln,   " Satın Alma Belgesi (CHAR 10)
+         bukrs      TYPE bukrs,   " Şirket Kodu (CHAR 4)
+         bstyp      TYPE bstyp,   " Belge Türü (CHAR 1)
+         bsart      TYPE bsart,   " Satın Alma Belgesi Türü (CHAR 4)
+         lifnr      TYPE lifnr,   " Tedarikçi Numarası (CHAR 10)
+         ekorg      TYPE ekorg,   " Satın Alma Organizasyonu (CHAR 4)
+         ekgrp      TYPE ekgrp,   " Satın Alma Grubu (CHAR 3)
+         waers      TYPE waers,   " Para Birimi (CHAR 5)
+         bedat      TYPE bedat,   " Belge Tarihi (DATS)
+         cell_color TYPE slis_t_specialcol_alv, " Renkleme alanı
+       END OF ty_ekko.
+
+DATA: gt_ekko TYPE TABLE OF ty_ekko,
+      gs_ekko TYPE ty_ekko.
+
+DATA: gt_fieldcat TYPE STANDARD TABLE OF slis_fieldcat_alv,
+      gs_fieldcat TYPE slis_fieldcat_alv.
+
+DATA: gs_layout TYPE slis_layout_alv.
+
+DATA: gt_events TYPE slis_t_event,
+      gs_event  TYPE slis_alv_event.
+
+*DATA: gt_sort TYPE slis_t_sortinfo_alv,
+*      gs_sort TYPE slis_sortinfo_alv.
+
+DATA: gt_color TYPE slis_t_specialcol_alv,
+      gs_color TYPE slis_specialcol_alv.
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+
+*&---------------------------------------------------------------------*
+*&  Include           Z_REUSE_ALV_FRM
+*&---------------------------------------------------------------------*
+*&---------------------------------------------------------------------*
+*&      Form  GET_DATA
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM get_data .
+  SELECT
+      ekko~ebeln      " Satın alma belgesi numarası
+      ekko~bstyp      " Belge tipi (örneğin sipariş, sözleşme vb.)
+      ekko~bsart      " Sipariş türü (örneğin NB, FO vb.)
+      ekko~bukrs      " Şirket kodu
+      ekko~lifnr      " Tedarikçi numarası
+      ekko~ekorg      " Satın alma organizasyonu
+      ekko~ekgrp      " Satın alma grubu
+      ekko~waers      " Para birimi
+      ekko~bedat      " Belge tarihi
+    FROM ekko
+    INTO CORRESPONDING FIELDS OF TABLE gt_ekko
+    UP TO 1000 ROWS.
+
+  LOOP AT gt_ekko INTO gs_ekko.
+
+    CLEAR: gs_color.
+    IF gs_ekko-ebeln >= '100000000' AND gs_ekko-ebeln <= '199999999'. " CF01 şirketine ait
+      gs_color-fieldname = 'EBELN'.
+      gs_color-color-col = 2.
+      gs_color-color-int = 1.
+      gs_color-color-inv = 0.
+      APPEND gs_color TO gs_ekko-cell_color.
+      MODIFY gt_ekko FROM gs_ekko.
+    ENDIF.
+
+    CLEAR: gs_color.
+    IF gs_ekko-bukrs = 'CF01'. " CF01 şirketi için farklı renk
+      gs_color-fieldname = 'BUKRS'.
+      gs_color-color-col = 3.
+      gs_color-color-int = 1.
+      gs_color-color-inv = 0.
+      APPEND gs_color TO gs_ekko-cell_color.
+      MODIFY gt_ekko FROM gs_ekko.
+    ELSEIF gs_ekko-bukrs = '3000'. " 3000 şirketi için farklı renk
+      gs_color-fieldname = 'BUKRS'.
+      gs_color-color-col = 4.
+      gs_color-color-int = 1.
+      gs_color-color-inv = 0.
+      APPEND gs_color TO gs_ekko-cell_color.
+      MODIFY gt_ekko FROM gs_ekko.
+    ENDIF.
+
+    CLEAR: gs_color.
+    IF gs_ekko-bstyp = 'F'. " Belge Türü F olanlar
+      gs_color-fieldname = 'BSTYP'.
+      gs_color-color-col = 5.
+      gs_color-color-int = 1.
+      gs_color-color-inv = 0.
+      APPEND gs_color TO gs_ekko-cell_color.
+      MODIFY gt_ekko FROM gs_ekko.
+    ENDIF.
+
+    CLEAR: gs_color.
+    IF gs_ekko-bsart = 'CFNB' OR gs_ekko-bsart = 'EC'. " Belirli satın alma türleri için
+      gs_color-fieldname = 'BSART'.
+      gs_color-color-col = 4.
+      gs_color-color-int = 1.
+      gs_color-color-inv = 0.
+      APPEND gs_color TO gs_ekko-cell_color.
+      MODIFY gt_ekko FROM gs_ekko.
+    ENDIF.
+
+    CLEAR: gs_color.
+    IF gs_ekko-lifnr >= '3000000000'. " Büyük tedarikçi numaraları için renklendirme
+      gs_color-fieldname = 'LIFNR'.
+      gs_color-color-col = 1.
+      gs_color-color-int = 1.
+      gs_color-color-inv = 0.
+      APPEND gs_color TO gs_ekko-cell_color.
+      MODIFY gt_ekko FROM gs_ekko.
+    ENDIF.
+
+    CLEAR: gs_color.
+    IF gs_ekko-ekorg = '4442' OR gs_ekko-ekorg = '3000'. " Satın alma organizasyonu bazlı renk
+      gs_color-fieldname = 'EKORG'.
+      gs_color-color-col = 6.
+      gs_color-color-int = 1.
+      gs_color-color-inv = 0.
+      APPEND gs_color TO gs_ekko-cell_color.
+      MODIFY gt_ekko FROM gs_ekko.
+    ENDIF.
+
+    CLEAR: gs_color.
+    IF gs_ekko-ekgrp = '441' OR gs_ekko-ekgrp = '013'. " Satın alma grubu bazlı renk
+      gs_color-fieldname = 'EKGRP'.
+      gs_color-color-col = 7.
+      gs_color-color-int = 1.
+      gs_color-color-inv = 0.
+      APPEND gs_color TO gs_ekko-cell_color.
+      MODIFY gt_ekko FROM gs_ekko.
+    ENDIF.
+
+    CLEAR: gs_color.
+    IF gs_ekko-waers = 'TRY'. " Türk Lirası için farklı renk
+      gs_color-fieldname = 'WAERS'.
+      gs_color-color-col = 3.
+      gs_color-color-int = 1.
+      gs_color-color-inv = 0.
+      APPEND gs_color TO gs_ekko-cell_color.
+      MODIFY gt_ekko FROM gs_ekko.
+    ELSEIF gs_ekko-waers = 'USD'. " Dolar için farklı renk
+      gs_color-fieldname = 'WAERS'.
+      gs_color-color-col = 4.
+      gs_color-color-int = 1.
+      gs_color-color-inv = 0.
+      APPEND gs_color TO gs_ekko-cell_color.
+      MODIFY gt_ekko FROM gs_ekko.
+    ENDIF.
+
+    CLEAR: gs_color.
+    IF gs_ekko-bedat >= '20200101'. " 2020 ve sonrası tarihler için renklendirme
+      gs_color-fieldname = 'BEDAT'.
+      gs_color-color-col = 2.
+      gs_color-color-int = 1.
+      gs_color-color-inv = 0.
+      APPEND gs_color TO gs_ekko-cell_color.
+      MODIFY gt_ekko FROM gs_ekko.
+    ENDIF.
+
+  ENDLOOP.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  BUILD_FIELD_CATALOG
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM build_field_catalog .
+
+  PERFORM: set_fc_sub USING 'EBELN' 'Satın Alma Belgesi' 10,
+           set_fc_sub USING 'BUKRS' 'Şirket Kodu' 4,
+           set_fc_sub USING 'BSTYP' 'Belge Türü' 1,
+           set_fc_sub USING 'BSART' 'Satın Alma Türü' 4,
+           set_fc_sub USING 'LIFNR' 'Tedarikçi No' 10,
+           set_fc_sub USING 'EKORG' 'Satın Alma Org.' 4,
+           set_fc_sub USING 'EKGRP' 'Satın Alma Grubu' 3,
+           set_fc_sub USING 'WAERS' 'Para Birimi' 5,
+           set_fc_sub USING 'BEDAT' 'Belge Tarihi' 10.
+
+*  CLEAR gt_fieldcat.
+*
+*  gs_fieldcat-fieldname = 'EBELN'.  " Satın alma belgesi numarası
+*  gs_fieldcat-seltext_m = 'Satın Alma Belgesi'.
+*  gs_fieldcat-outputlen = 10.
+*  APPEND gs_fieldcat TO gt_fieldcat.
+*
+*  gs_fieldcat-fieldname = 'BUKRS'.  " Şirket kodu
+*  gs_fieldcat-seltext_m = 'Şirket Kodu'.
+*  gs_fieldcat-outputlen = 4.
+*  APPEND gs_fieldcat TO gt_fieldcat.
+*
+*  gs_fieldcat-fieldname = 'BSTYP'.  " Belge tipi
+*  gs_fieldcat-seltext_m = 'Belge Türü'.
+*  gs_fieldcat-outputlen = 1.
+*  APPEND gs_fieldcat TO gt_fieldcat.
+*
+*  gs_fieldcat-fieldname = 'BSART'.  " Satın alma belgesi türü
+*  gs_fieldcat-seltext_m = 'Satın Alma Türü'.
+*  gs_fieldcat-outputlen = 4.
+*  APPEND gs_fieldcat TO gt_fieldcat.
+*
+*  gs_fieldcat-fieldname = 'LIFNR'.  " Tedarikçi numarası
+*  gs_fieldcat-seltext_m = 'Tedarikçi No'.
+*  gs_fieldcat-outputlen = 10.
+*  APPEND gs_fieldcat TO gt_fieldcat.
+*
+*  gs_fieldcat-fieldname = 'EKORG'.  " Satın alma organizasyonu
+*  gs_fieldcat-seltext_m = 'Satın Alma Org.'.
+*  gs_fieldcat-outputlen = 4.
+*  APPEND gs_fieldcat TO gt_fieldcat.
+*
+*  gs_fieldcat-fieldname = 'EKGRP'.  " Satın alma grubu
+*  gs_fieldcat-seltext_m = 'Satın Alma Grubu'.
+*  gs_fieldcat-outputlen = 3.
+*  APPEND gs_fieldcat TO gt_fieldcat.
+*
+*  gs_fieldcat-fieldname = 'WAERS'.  " Para birimi
+*  gs_fieldcat-seltext_m = 'Para Birimi'.
+*  gs_fieldcat-outputlen = 5.
+*  APPEND gs_fieldcat TO gt_fieldcat.
+*
+*  gs_fieldcat-fieldname = 'BEDAT'.  " Belge tarihi
+*  gs_fieldcat-seltext_m = 'Belge Tarihi'.
+*  gs_fieldcat-outputlen = 10.
+*  gs_fieldcat-datatype = 'DATS'.
+*  APPEND gs_fieldcat TO gt_fieldcat.
+
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  BUILD_LAYOUT
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM build_layout .
+
+  gs_layout-zebra       = 'X'.   " Zebra deseni
+  gs_layout-colwidth_optimize = 'X'.  " Otomatik kolon genişliği
+  gs_layout-window_titlebar = 'Reuse Alv List Display'.
+  gs_layout-coltab_fieldname = 'CELL_COLOR'.
+
+ENDFORM.
+
+FORM build_sort.
+*  CLEAR gs_sort.
+*  gs_sort-spos = 1.
+*  gs_sort-fieldname = 'EBELN'.  " Satın Alma Belgesi
+*  gs_sort-up = 'X'.
+*  APPEND gs_sort TO gt_sort.
+*
+*
+*  CLEAR gs_sort.
+*  gs_sort-spos = 2.
+*  gs_sort-fieldname = 'EKGRP'.  " Satın Alma Grubu
+*  gs_sort-down = 'X'.
+*  APPEND gs_sort TO gt_sort.
+ENDFORM.
+
+FORM special_groups.
+
+*  LOOP AT gt_ekko INTO gs_ekko.
+*
+*
+*    gs_color-fieldname = 'EBELN'.
+*    gs_color-color-col = 2.
+*    gs_color-color-int = 1.
+*    gs_color-color-inv = 0.
+*    APPEND gs_color TO gt_color.
+*
+*
+*    gs_color-fieldname = 'BUKRS'.
+*    gs_color-color-col = 3.
+*    gs_color-color-int = 1.
+*    gs_color-color-inv = 0.
+*    APPEND gs_color TO gt_color.
+*
+*
+*    gs_color-fieldname = 'BSTYP'.
+*    gs_color-color-col = 5.
+*    gs_color-color-int = 1.
+*    gs_color-color-inv = 0.
+*    APPEND gs_color TO gt_color.
+*
+*
+*    gs_color-fieldname = 'BSART'.
+*    gs_color-color-col = 4.
+*    gs_color-color-int = 1.
+*    gs_color-color-inv = 0.
+*    APPEND gs_color TO gt_color.
+*
+*
+*    gs_color-fieldname = 'LIFNR'.
+*    gs_color-color-col = 1.
+*    gs_color-color-int = 1.
+*    gs_color-color-inv = 0.
+*    APPEND gs_color TO gt_color.
+*
+*
+*    gs_color-fieldname = 'EKORG'.
+*    gs_color-color-col = 6.
+*    gs_color-color-int = 1.
+*    gs_color-color-inv = 0.
+*    APPEND gs_color TO gt_color.
+*
+*
+*    gs_color-fieldname = 'EKGRP'.
+*    gs_color-color-col = 7.
+*    gs_color-color-int = 1.
+*    gs_color-color-inv = 0.
+*    APPEND gs_color TO gt_color.
+*
+*
+*    gs_color-fieldname = 'WAERS'.
+*    gs_color-color-col = 3.
+*    gs_color-color-int = 1.
+*    gs_color-color-inv = 0.
+*    APPEND gs_color TO gt_color.
+*
+*
+*    gs_color-fieldname = 'BEDAT'.
+*    gs_color-color-col = 2.
+*    gs_color-color-int = 1.
+*    gs_color-color-inv = 0.
+*    APPEND gs_color TO gt_color.
+
+*  ENDLOOP.
+
+ENDFORM.
+
+FORM build_events.
+*  CLEAR gs_event.
+*  gs_event-name = 'TOP_OF_PAGE'.   " Olay Adı
+*  gs_event-form = 'TOP_OF_PAGE'.   " Çağrılacak FORM Adı
+*  APPEND gs_event TO gt_events.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  DISPLAY_ALV
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM display_alv .
+
+  CALL FUNCTION 'REUSE_ALV_LIST_DISPLAY'
+    EXPORTING
+*     I_INTERFACE_CHECK        = ' '
+*     I_BYPASSING_BUFFER       =
+*     I_BUFFER_ACTIVE          = ' '
+      i_callback_program       = sy-repid
+      i_callback_pf_status_set = 'SET_PF_STATUS'
+      i_callback_user_command  = 'USER_COMMAND'
+*     I_STRUCTURE_NAME         =
+      is_layout                = gs_layout
+      it_fieldcat              = gt_fieldcat
+*     IT_EXCLUDING             =
+*     it_special_groups        = gt_color
+*     it_sort                  = gt_sort
+*     it_filter                =
+*     IS_SEL_HIDE              =
+*     I_DEFAULT                = 'X'
+*     i_save                   = ' '
+*     IS_VARIANT               =
+      it_events                = gt_events
+*     IT_EVENT_EXIT            =
+*     IS_PRINT                 =
+*     IS_REPREP_ID             =
+*     I_SCREEN_START_COLUMN    = 0
+*     I_SCREEN_START_LINE      = 0
+*     I_SCREEN_END_COLUMN      = 0
+*     I_SCREEN_END_LINE        = 0
+*     IR_SALV_LIST_ADAPTER     =
+*     IT_EXCEPT_QINFO          =
+*     I_SUPPRESS_EMPTY_DATA    = ABAP_FALSE
+* IMPORTING
+*     E_EXIT_CAUSED_BY_CALLER  =
+*     ES_EXIT_CAUSED_BY_USER   =
+    TABLES
+      t_outtab                 = gt_ekko.
+* EXCEPTIONS
+*   PROGRAM_ERROR                  = 1
+*   OTHERS                         = 2
+  .
+  IF sy-subrc <> 0.
+* Implement suitable error handling here
+  ENDIF.
+
+
+ENDFORM.
+
+FORM set_pf_status USING rt_extab TYPE slis_t_extab.
+  SET PF-STATUS 'Z_ALV_STATUS'.
+ENDFORM.
+
+FORM user_command USING r_ucomm TYPE sy-ucomm
+                        rs_selfield TYPE slis_selfield.
+  CASE r_ucomm.
+    WHEN '&BACK'.
+      LEAVE PROGRAM.
+    WHEN '&PRINT'.
+      MESSAGE 'Yazdırma işlemi yapılıyor...' TYPE 'I'.
+    WHEN '&EXCEL'.
+      MESSAGE 'Excel\''e aktarma işlemi yapılıyor...' TYPE 'I'.
+    WHEN '&SORT'.
+      MESSAGE 'Sıralama işlemi yapılıyor...' TYPE 'I'.
+    WHEN '&FILTER'.
+      MESSAGE 'Filtreleme işlemi yapılıyor...' TYPE 'I'.
+  ENDCASE.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*&      Form  SET_FC_SUB
+*&---------------------------------------------------------------------*
+*       text
+*----------------------------------------------------------------------*
+*  -->  p1        text
+*  <--  p2        text
+*----------------------------------------------------------------------*
+FORM set_fc_sub USING p_fieldname
+                      p_seltext_m
+                      p_outputlen.
+  CLEAR: gs_fieldcat.
+  gs_fieldcat-fieldname = p_fieldname.
+  gs_fieldcat-seltext_m = p_seltext_m.
+  gs_fieldcat-outputlen = p_outputlen.
+  APPEND gs_fieldcat TO gt_fieldcat.
+
+ENDFORM.
+
+FORM top_of_page.
+
+*  DATA: lt_listheader TYPE TABLE OF slis_listheader,
+*        ls_listheader TYPE slis_listheader.
+*
+*  CLEAR ls_listheader.
+*  ls_listheader-typ  = 'H'.  " Header
+*  ls_listheader-info = 'SATIN ALMA BELGE LİSTESİ'.
+*  APPEND ls_listheader TO lt_listheader.
+*
+*  CLEAR ls_listheader.
+*  ls_listheader-typ  = 'S'.  " Subtitle
+*  ls_listheader-key  = 'Tarih:'.
+*  ls_listheader-info = sy-datum.
+*  APPEND ls_listheader TO lt_listheader.
+*
+*  CLEAR ls_listheader.
+*  ls_listheader-typ  = 'S'.  " Subtitle
+*  ls_listheader-key  = 'Kullanıcı:'.
+*  ls_listheader-info = sy-uname.
+*  APPEND ls_listheader TO lt_listheader.
+*
+*  " TOP OF PAGE içeriğini ekrana bas
+*  CALL FUNCTION 'REUSE_ALV_COMMENTARY_WRITE'
+*    EXPORTING
+*      it_list_commentary = lt_listheader.
+
+ENDFORM.
